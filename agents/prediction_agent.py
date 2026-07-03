@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 import json
 import logging
-from services.llm_service import LLMService
+from services.llm_service import LLMService, LLMConnectionError
 from models.weather import CityWeatherSummary
 from database.db import DatabaseManager
 
@@ -48,8 +48,7 @@ class PredictionAgent:
         response_text = self.llm_service.generate_response(system_prompt, user_prompt)
         
         if not response_text:
-            logger.error("No response received from LLM.")
-            return self._fallback_prediction(weather_summary.city_name)
+            raise LLMConnectionError(f"No response received from LLM for city {weather_summary.city_name}.")
             
         try:
             # Clean possible markdown formatting in case the LLM ignores instructions
@@ -62,14 +61,4 @@ class PredictionAgent:
             return result
         except Exception as e:
             logger.error(f"Failed to parse LLM response: {e}\nRaw output: {response_text}")
-            return self._fallback_prediction(weather_summary.city_name)
-            
-    def _fallback_prediction(self, city_name: str) -> PredictionResult:
-        """Returns a neutral fallback prediction in case of failure."""
-        return PredictionResult(
-            city_name=city_name,
-            event_predicted="Rain within 3 days",
-            probability=0.5,
-            confidence=0.1,
-            reasoning="Fallback due to LLM parsing or connection error."
-        )
+            raise LLMConnectionError(f"Failed to parse LLM prediction for {weather_summary.city_name}: {e}")

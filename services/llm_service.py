@@ -6,6 +6,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class LLMConnectionError(Exception):
+    """Raised when the LLM service fails to connect or return a valid response."""
+    pass
+
+
 class LLMService:
     """Service to interact with OpenRouter via the OpenAI client interface."""
     def __init__(self):
@@ -35,4 +40,4 @@ class LLMService:
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"Error calling OpenRouter LLM: {e}")
-            return None
+            raise LLMConnectionError(f"Failed to communicate with LLM: {e}")
