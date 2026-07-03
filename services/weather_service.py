@@ -47,8 +47,6 @@ class WeatherService:
             {"city": city, "temp_c": 22.5, "forecast": [{"date": "2023-11-01", "max": 25, "min": 18, "precip": 0.2, "condition": "Cloudy"}]}
             for city in self.TARGET_CITIES
         ]
-            logger.error(f"Error fetching global data: {e}")
-            return []
 
     def fetch_local_data(self) -> List[Dict[str, Any]]:
         """Fetches data using the 'weather-database-scraper' Apify actor."""
@@ -72,8 +70,6 @@ class WeatherService:
             {"location": city, "current_temp": 23.0, "predictions": [{"day": "2023-11-01", "high": 24, "low": 19, "rain_chance": 0.1, "desc": "Partly Cloudy"}]}
             for city in self.TARGET_CITIES
         ]
-            logger.error(f"Error fetching local data: {e}")
-            return []
 
     def get_standardized_data(self) -> Dict[str, CityWeatherSummary]:
         """

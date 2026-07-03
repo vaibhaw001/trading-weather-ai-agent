@@ -42,9 +42,23 @@ class DatabaseManager:
                         size REAL,
                         price REAL,
                         kelly_fraction REAL,
-                        timestamp TEXT
+                        timestamp TEXT,
+                        status TEXT DEFAULT 'OPEN',
+                        pnl REAL DEFAULT 0.0
                     )
                 ''')
+                
+                # Attempt to add columns to existing table (for backward compatibility)
+                try:
+                    cursor.execute("ALTER TABLE trades ADD COLUMN status TEXT DEFAULT 'OPEN'")
+                except sqlite3.OperationalError:
+                    pass # Column already exists
+                    
+                try:
+                    cursor.execute("ALTER TABLE trades ADD COLUMN pnl REAL DEFAULT 0.0")
+                except sqlite3.OperationalError:
+                    pass # Column already exists
+                    
                 conn.commit()
             logger.info("Database initialized successfully.")
         except Exception as e:
@@ -76,8 +90,8 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    INSERT INTO trades (order_id, city_name, side, size, price, kelly_fraction, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO trades (order_id, city_name, side, size, price, kelly_fraction, timestamp, status, pnl)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', 0.0)
                 ''', (
                     order.order_id,
                     order.city_name,
@@ -114,3 +128,29 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to fetch trades: {e}")
             return []
+
+    def get_open_trades(self):
+        """Fetches all OPEN trades from the database."""
+        try:
+            with self.get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM trades WHERE status = 'OPEN' ORDER BY timestamp DESC")
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to fetch open trades: {e}")
+            return []
+
+    def update_trade_status(self, order_id: str, status: str, pnl: float):
+        """Updates the status and PnL of a trade."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE trades 
+                    SET status = ?, pnl = ? 
+                    WHERE order_id = ?
+                ''', (status, pnl, order_id))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to update trade status: {e}")

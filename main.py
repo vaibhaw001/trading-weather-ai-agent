@@ -55,6 +55,13 @@ def run_hermes_daemon():
             order = trading_agent.execute_trade(decision, market)
             
         logger.info(f"Total Open Orders: {len(trading_agent.open_orders)}")
+        
+        # Phase 4: Trade Settlement
+        logger.info("--- PHASE 4: Trade Settlement ---")
+        from agents.settlement_agent import SettlementAgent
+        settlement_agent = SettlementAgent()
+        settlement_agent.simulate_settlement()
+        
         logger.info("Cycle completed successfully.")
         
     except Exception as e:

@@ -10,6 +10,7 @@ The backend is built around a service-oriented, multi-agent architecture designe
 2. **Reasoning Engine (`agents/prediction_agent.py`)**: Passes normalized weather structures into an OpenRouter LLM (Llama 3) configured with strict prompt engineering. It acts as a quant forecaster and outputs precise win probabilities and confidence scores.
 3. **Risk Management (`agents/risk_agent.py`)**: Implements the mathematical **Kelly Criterion** against simulated Polymarket odds to determine the optimal capital allocation per trade, maximizing growth while preventing ruin through a configured maximum exposure cap.
 4. **Execution & UI (`ui/app.py` & `services/notification_service.py`)**: Executes paper trades, pushes live Telegram notifications, and updates a local Streamlit dashboard to monitor active risk, manual hedges, and historical PnL.
+5. **Data Persistence (`database/db.py`)**: Uses a local SQLite database to robustly persist predictions, market odds, and execution history across agent cycles, providing real-time data to the UI.
 
 ## 🚀 Getting Started
 
