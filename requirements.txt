@@ -1,0 +1,28 @@
+# Agent Framework
+
+# LLM Providers (OpenRouter)
+openai>=1.0.0
+
+# Data Collection & Processing
+apify-client>=1.6.0
+requests>=2.31.0
+httpx>=0.25.0
+pandas>=2.1.0
+numpy>=1.26.0
+
+# Data Validation & Models
+pydantic>=2.4.0
+
+# Web Framework / UI
+streamlit>=1.28.0
+plotly>=5.17.0
+
+# Utilities
+python-dotenv>=1.0.0
+loguru>=0.7.2
+
+# Database (SQLAlchemy - Optional but recommended for advanced ORM mapping, SQLite included natively)
+sqlalchemy>=2.0.21
+
+# Testing
+pytest>=7.4.0
