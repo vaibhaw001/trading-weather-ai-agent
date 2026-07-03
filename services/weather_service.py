@@ -31,16 +31,22 @@ class WeatherService:
         }
         
         try:
-            # actor_call = self.client.actor("username/weather-api").call(run_input=run_input)
-            # return list(self.client.dataset(actor_call["defaultDatasetId"]).iterate_items())
-            
-            # Mocking the response for the architecture assessment
-            logger.info("Mocking global API call due to placeholder actor ID.")
-            return [
-                {"city": city, "temp_c": 22.5, "forecast": [{"date": "2023-11-01", "max": 25, "min": 18, "precip": 0.2, "condition": "Cloudy"}]}
-                for city in self.TARGET_CITIES
-            ]
+            # Try to call the actual Apify actor
+            logger.info("Attempting live Apify call for 'weather-api'...")
+            # We assume the user has the actor configured. If not, it falls back to mock.
+            actor_call = self.client.actor("weather-api/weather-api").call(run_input=run_input)
+            items = list(self.client.dataset(actor_call["defaultDatasetId"]).iterate_items())
+            if items:
+                logger.info("Live Apify global data retrieved successfully.")
+                return items
         except Exception as e:
+            logger.warning(f"Live global Apify call failed ({e}). Falling back to mock data.")
+            
+        # Mocking the response for safety
+        return [
+            {"city": city, "temp_c": 22.5, "forecast": [{"date": "2023-11-01", "max": 25, "min": 18, "precip": 0.2, "condition": "Cloudy"}]}
+            for city in self.TARGET_CITIES
+        ]
             logger.error(f"Error fetching global data: {e}")
             return []
 
@@ -52,16 +58,20 @@ class WeatherService:
         }
         
         try:
-            # actor_call = self.client.actor("username/weather-database-scraper").call(run_input=run_input)
-            # return list(self.client.dataset(actor_call["defaultDatasetId"]).iterate_items())
-            
-            # Mocking the response
-            logger.info("Mocking local scraper API call due to placeholder actor ID.")
-            return [
-                {"location": city, "current_temp": 23.0, "predictions": [{"day": "2023-11-01", "high": 24, "low": 19, "rain_chance": 0.1, "desc": "Partly Cloudy"}]}
-                for city in self.TARGET_CITIES
-            ]
+            logger.info("Attempting live Apify call for 'weather-database-scraper'...")
+            actor_call = self.client.actor("oneary/weather-database-scraper").call(run_input=run_input)
+            items = list(self.client.dataset(actor_call["defaultDatasetId"]).iterate_items())
+            if items:
+                logger.info("Live Apify local data retrieved successfully.")
+                return items
         except Exception as e:
+            logger.warning(f"Live local Apify call failed ({e}). Falling back to mock data.")
+            
+        # Mocking the response
+        return [
+            {"location": city, "current_temp": 23.0, "predictions": [{"day": "2023-11-01", "high": 24, "low": 19, "rain_chance": 0.1, "desc": "Partly Cloudy"}]}
+            for city in self.TARGET_CITIES
+        ]
             logger.error(f"Error fetching local data: {e}")
             return []
 

@@ -3,6 +3,7 @@ import json
 import logging
 from services.llm_service import LLMService
 from models.weather import CityWeatherSummary
+from database.db import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class PredictionAgent:
     """
     def __init__(self):
         self.llm_service = LLMService()
+        self.db = DatabaseManager()
         
     def predict_rain_probability(self, weather_summary: CityWeatherSummary) -> PredictionResult:
         """Predicts the probability of rain in the next 3 days based on ingested data."""
@@ -53,7 +55,11 @@ class PredictionAgent:
             # Clean possible markdown formatting in case the LLM ignores instructions
             cleaned_text = response_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(cleaned_text)
-            return PredictionResult(**data)
+            result = PredictionResult(**data)
+            
+            # Persist to database
+            self.db.insert_prediction(result)
+            return result
         except Exception as e:
             logger.error(f"Failed to parse LLM response: {e}\nRaw output: {response_text}")
             return self._fallback_prediction(weather_summary.city_name)

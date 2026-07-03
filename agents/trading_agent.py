@@ -3,6 +3,7 @@ import uuid
 from typing import List, Optional
 from models.trading import TradeDecision, Order, MarketOdds
 from services.notification_service import NotificationService
+from database.db import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class TradingAgent:
     def __init__(self):
         self.open_orders: List[Order] = []
         self.notifier = NotificationService()
+        self.db = DatabaseManager()
         
     def execute_trade(self, decision: TradeDecision, market: MarketOdds) -> Optional[Order]:
         """Places a paper trade based on the Risk Agent's decision."""
@@ -35,6 +37,7 @@ class TradingAgent:
         )
         
         self.open_orders.append(order)
+        self.db.insert_trade(order, decision.kelly_fraction)
         logger.info(f"[{decision.city_name}] EXECUTED {order.side} ORDER: {order.size:.2f} shares @ ${order.price:.2f} | Total Stake: ${decision.recommended_position_size:.2f}")
         
         # Broadcast trade alert via Telegram

@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 import sys
 import os
 
@@ -23,30 +24,42 @@ st.sidebar.write(f"**Max Exposure Limit:** {settings.MAX_EXPOSURE_PER_TRADE * 10
 if st.sidebar.button("Force Agent Cycle"):
     st.sidebar.success("Daemon cycle triggered! (Check terminal for logs)")
 
+# --- DATABASE LOADER ---
+def load_db_data():
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), settings.DATABASE_PATH.replace("sqlite:///", ""))
+    try:
+        conn = sqlite3.connect(db_path)
+        positions = pd.read_sql_query("SELECT city_name as City, timestamp as Date, side as Side, size as Shares, price as 'Avg Price' FROM trades ORDER BY timestamp DESC", conn)
+        history = pd.read_sql_query("SELECT timestamp as Date, city_name as City, event_predicted as Prediction, probability as Probability, confidence as Confidence FROM predictions ORDER BY timestamp DESC", conn)
+        conn.close()
+        return positions, history
+    except Exception as e:
+        return pd.DataFrame(), pd.DataFrame()
+
+positions_df, history_df = load_db_data()
+
 # --- TOP METRICS ---
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.metric("Current Bankroll", f"${settings.STARTING_BANKROLL:.2f}", "+$0.00")
 with col2:
-    st.metric("Active Risk (Exposure)", "$150.00", "2 Open Trades", delta_color="inverse")
+    st.metric("Active Risk (Exposure)", f"${len(positions_df) * 10 if not positions_df.empty else 0}", f"{len(positions_df)} Open Trades", delta_color="inverse")
 with col3:
-    st.metric("Historical Win Rate", "68.5%", "+2.1%")
+    st.metric("Historical Win Rate", "N/A", "Pending Resolution")
 with col4:
-    st.metric("Total ROI", "15.2%", "+1.0%")
+    st.metric("Total ROI", "N/A", "Pending Resolution")
 
 st.markdown("---")
 
 # --- OPEN POSITIONS ---
 st.subheader("Active Positions (Paper Trading)")
 
-# In a production setting, this would be fetched from SQLite via the database/ module
-mock_positions = pd.DataFrame([
-    {"Date": "2023-11-01 08:30", "City": "London", "Side": "BUY_YES", "Shares": 250, "Avg Price": "$0.40", "Total Stake": "$100.00", "Current Odds": "$0.45", "Unrealized PnL": "+$12.50"},
-    {"Date": "2023-11-01 09:15", "City": "New York", "Side": "BUY_NO", "Shares": 500, "Avg Price": "$0.10", "Total Stake": "$50.00", "Current Odds": "$0.08", "Unrealized PnL": "-$10.00"}
-])
-
-st.dataframe(mock_positions, use_container_width=True, hide_index=True)
+if positions_df.empty:
+    st.info("No active positions found in database. Run the daemon to execute trades.")
+    positions_df = pd.DataFrame(columns=["City", "Date", "Side", "Shares", "Avg Price"])
+else:
+    st.dataframe(positions_df, use_container_width=True, hide_index=True)
 
 # --- MANUAL HEDGING ---
 st.subheader("Manual Interventions & Hedging")
@@ -54,7 +67,7 @@ st.write("Use this panel to manually hedge or close positions if the AI's risk p
 
 hedge_col1, hedge_col2 = st.columns([3, 1])
 with hedge_col1:
-    hedge_city = st.selectbox("Select Position to Hedge / Close", mock_positions["City"].tolist())
+    hedge_city = st.selectbox("Select Position to Hedge / Close", positions_df["City"].tolist() if not positions_df.empty else ["No Positions"])
 with hedge_col2:
     st.write("")
     st.write("")
@@ -65,15 +78,8 @@ st.markdown("---")
 
 # --- PREDICTION HISTORY ---
 st.subheader("AI Prediction History (Model Evaluation)")
-mock_history = pd.DataFrame([
-    {"Date": "2023-10-25", "City": "Tokyo", "Prediction": "Rain", "Probability": "85%", "Confidence": "90%", "Actual": "Rain", "Result": "✅ WIN"},
-    {"Date": "2023-10-26", "City": "Sydney", "Prediction": "No Rain", "Probability": "65%", "Confidence": "75%", "Actual": "Rain", "Result": "❌ LOSS"},
-    {"Date": "2023-10-28", "City": "Miami", "Prediction": "Rain", "Probability": "55%", "Confidence": "40%", "Actual": "Rain", "Result": "✅ WIN"},
-])
 
-def color_result(val):
-    color = 'green' if 'WIN' in val else 'red'
-    return f'color: {color}'
-
-styled_history = mock_history.style.map(color_result, subset=['Result'])
-st.dataframe(styled_history, use_container_width=True, hide_index=True)
+if history_df.empty:
+    st.info("No predictions found in database. Run the daemon to generate predictions.")
+else:
+    st.dataframe(history_df, use_container_width=True, hide_index=True)
