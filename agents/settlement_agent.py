@@ -27,7 +27,7 @@ class SettlementAgent:
         logger.info(f"[{city_name}] No rain recorded in historical data.")
         return False
 
-    def simulate_settlement(self):
+    def simulate_settlement(self, force=False):
         """
         Fetches all OPEN trades and resolves them by verifying actual weather.
         """
@@ -38,8 +38,16 @@ class SettlementAgent:
             logger.info("No open trades to settle.")
             return
 
+        from datetime import datetime, timedelta
+        
         settled_count = 0
         for trade in open_trades:
+            # Trades take 3 days to resolve (unless forced)
+            trade_time = datetime.fromisoformat(trade['timestamp'])
+            if not force and (datetime.utcnow() - trade_time < timedelta(days=3)):
+                logger.info(f"Trade for {trade['city_name']} is too new to settle. Leaving OPEN.")
+                continue
+                
             order_id = trade['order_id']
             size = trade['size']
             price = trade['price']

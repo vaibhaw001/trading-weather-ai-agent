@@ -21,8 +21,19 @@ st.sidebar.write(f"**Starting Bankroll:** ${settings.STARTING_BANKROLL:.2f}")
 st.sidebar.write(f"**Max Loss (Daily):** ${settings.MAX_DAILY_LOSS:.2f}")
 st.sidebar.write(f"**Max Exposure Limit:** {settings.MAX_EXPOSURE_PER_TRADE * 100}%")
 
+# Simulation Mode Toggle
+sim_mode = st.sidebar.checkbox("Simulation Mode (Mock AI)", value=True, help="Bypasses OpenRouter LLM API calls and runs predictions locally.")
+settings.SIMULATION_MODE = sim_mode
+
 if st.sidebar.button("Force Agent Cycle"):
-    st.sidebar.success("Daemon cycle triggered! (Check terminal for logs)")
+    with st.spinner("Executing agent pipeline (Ingestion -> Prediction -> Trading -> Settlement)..."):
+        try:
+            from main import run_hermes_daemon
+            run_hermes_daemon()
+            st.sidebar.success("Daemon cycle completed!")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Daemon execution failed: {e}")
 
 # --- DATABASE LOADER ---
 def load_db_data():
@@ -89,7 +100,7 @@ else:
 st.subheader("Manual Interventions & Hedging")
 st.write("Use this panel to manually hedge or close positions if the AI's risk parameters fail or market conditions change drastically.")
 
-hedge_col1, hedge_col2 = st.columns([3, 1])
+hedge_col1, hedge_col2, hedge_col3 = st.columns([2, 1, 1])
 with hedge_col1:
     hedge_city = st.selectbox("Select Position to Hedge / Close", open_positions_df["City"].tolist() if not open_positions_df.empty else ["No Positions"])
 with hedge_col2:
@@ -101,15 +112,27 @@ with hedge_col2:
                 db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), settings.DATABASE_PATH.replace("sqlite:///", ""))
                 conn = sqlite3.connect(db_path)
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM trades WHERE city_name = ?", (hedge_city,))
+                cursor.execute("UPDATE trades SET status = 'CLOSED_HEDGED', pnl = 0.0 WHERE city_name = ?", (hedge_city,))
                 conn.commit()
                 conn.close()
-                st.success(f"Manual Hedge executed for {hedge_city}. Position has been closed.")
+                st.success(f"Manual Hedge executed for {hedge_city}. Position moved to history.")
                 st.rerun()
             except Exception as e:
                 st.error(f"Failed to close position: {e}")
         else:
             st.warning("No position selected to hedge.")
+with hedge_col3:
+    st.write("")
+    st.write("")
+    if st.button("Force Settle All", help="Bypasses the 3-day hold age requirement and forces settlement of all open trades."):
+        try:
+            from agents.settlement_agent import SettlementAgent
+            settlement_agent = SettlementAgent()
+            settlement_agent.simulate_settlement(force=True)
+            st.success("Forced settlement completed!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Failed to force settlement: {e}")
 
 st.markdown("---")
 
@@ -120,7 +143,9 @@ if closed_positions_df.empty:
     st.info("No trades have been resolved yet.")
 else:
     def color_status(val):
-        color = 'green' if 'WIN' in val else 'red'
+        if 'WIN' in val: color = 'green'
+        elif 'LOSS' in val: color = 'red'
+        else: color = 'gray'
         return f'color: {color}'
 
     styled_closed = closed_positions_df.style.map(color_status, subset=['Status'])

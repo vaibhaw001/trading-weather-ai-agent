@@ -28,6 +28,24 @@ class PredictionAgent:
         """Predicts the probability of rain in the next 3 days based on ingested data."""
         logger.info(f"Generating prediction for {weather_summary.city_name}")
         
+        # Simulation Mode bypass
+        from config.settings import settings
+        if settings.SIMULATION_MODE:
+            import random
+            # Deterministic/semi-random mock prediction based on city name for testing variety
+            random.seed(hash(weather_summary.city_name))
+            prob = round(random.uniform(0.15, 0.85), 2)
+            conf = round(random.uniform(0.70, 0.95), 2)
+            result = PredictionResult(
+                city_name=weather_summary.city_name,
+                event_predicted="Rain within 3 days",
+                probability=prob,
+                confidence=conf,
+                reasoning=f"Simulation Mode: Estimated {prob*100:.0f}% chance of precipitation based on mock humidity ({random.randint(50, 90)}%) and historical summer trends."
+            )
+            self.db.insert_prediction(result)
+            return result
+        
         system_prompt = (
             "You are a highly sophisticated quantitative weather forecaster and Polymarket trading algorithm. "
             "Your task is to analyze the provided weather data and output a precise probability (between 0.01 and 0.99) "

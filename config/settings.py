@@ -19,5 +19,8 @@ class Settings:
     MAX_DAILY_LOSS = float(os.getenv("MAX_DAILY_LOSS", 100.0))
     STARTING_BANKROLL = float(os.getenv("STARTING_BANKROLL", 1000.0))
     MAX_EXPOSURE_PER_TRADE = float(os.getenv("MAX_EXPOSURE_PER_TRADE", 0.10))
+    
+    # Simulation
+    SIMULATION_MODE = os.getenv("SIMULATION_MODE", "True").lower() in ("true", "1", "yes")
 
 settings = Settings()
