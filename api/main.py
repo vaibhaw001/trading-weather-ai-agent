@@ -86,10 +86,21 @@ async def start_agent(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_hermes_cycle)
     return {"status": "Agent cycle started"}
 
+@app.get("/agent-status")
+def get_agent_status():
+    global is_running
+    return {"is_running": is_running}
+
 @app.post("/stop-agent")
 def stop_agent():
     # Placeholder for a more complex cancellation token logic
     return {"status": "Agent stop requested (not immediately forced)"}
+
+@app.post("/reset-data")
+def reset_data():
+    models.Base.metadata.drop_all(bind=engine)
+    models.Base.metadata.create_all(bind=engine)
+    return {"status": "Data reset successfully"}
 
 @app.get("/weather")
 def get_weather(db: Session = Depends(get_db)):

@@ -46,6 +46,17 @@ if st.sidebar.button("Run Agent Cycle"):
     try:
         response = requests.post(f"{API_URL}/start-agent")
         st.sidebar.success(response.json().get("status", "Started"))
+        
+        # Wait for agent cycle to finish so the UI updates
+        import time
+        with st.spinner("🤖 Agent cycle is running... This might take a minute."):
+            time.sleep(2) # Initial wait
+            while True:
+                status_res = requests.get(f"{API_URL}/agent-status")
+                if status_res.status_code == 200 and not status_res.json().get("is_running"):
+                    break
+                time.sleep(3)
+        st.rerun()
     except Exception as e:
         st.sidebar.error(f"API Error: {e}")
 
@@ -75,7 +86,7 @@ starting_cap = st.sidebar.number_input("Starting Capital", value=1000.0)
 max_risk = st.sidebar.slider("Maximum Risk %", 1, 100, 10)
 kelly_fraction = st.sidebar.slider("Kelly Fraction", 0.0, 1.0, 0.25)
 paper_trading = st.sidebar.toggle("Paper Trading", value=True)
-model = st.sidebar.selectbox("OpenRouter Model", ["mistralai/mistral-7b-instruct:free", "google/gemma-7b-it:free"])
+model = st.sidebar.selectbox("OpenRouter Model", ["meta-llama/llama-3.2-3b-instruct:free", "google/gemma-7b-it:free"])
 
 def fetch_data(endpoint):
     try:
@@ -86,7 +97,32 @@ def fetch_data(endpoint):
         pass
     return []
 
-st.title("Main Dashboard")
+col_title, col_reset = st.columns([0.85, 0.15])
+with col_title:
+    st.title("Main Dashboard")
+with col_reset:
+    st.write("") # Add some spacing to align with the title
+    if st.button("🔄 Reset Data", use_container_width=True):
+        try:
+            requests.post(f"{API_URL}/reset-data")
+            st.rerun()
+        except:
+            st.error("Failed to reset data.")
+
+st.markdown("---")
+st.subheader("Latest Result")
+top_preds = fetch_data("predictions")
+if top_preds:
+    latest_pred = top_preds[-1]
+    city = latest_pred.get("city_name", "Unknown")
+    event = latest_pred.get("event_predicted", "Unknown")
+    reasoning = latest_pred.get("reasoning", "No reasoning available.")
+    conf = latest_pred.get("confidence", 0)
+    st.info(f"**Latest Prediction for {city} ({event})**: {reasoning} (Confidence: {conf}%)")
+else:
+    st.info("No results yet. Run the Agent Cycle to generate results.")
+st.markdown("---")
+
 portfolio = fetch_data("portfolio")
 analytics = fetch_data("analytics")
 
@@ -105,7 +141,7 @@ st.markdown("---")
 st.subheader("Today's Predictions")
 preds = fetch_data("predictions")
 if preds:
-    st.dataframe(pd.DataFrame(preds).drop(columns=["id", "reasoning", "timestamp"], errors='ignore'), use_container_width=True)
+    st.dataframe(pd.DataFrame(preds).drop(columns=["id", "timestamp"], errors='ignore'), use_container_width=True)
 else:
     st.info("No predictions yet.")
 

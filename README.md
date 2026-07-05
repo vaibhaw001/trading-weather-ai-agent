@@ -7,11 +7,18 @@ An autonomous multi-agent quantitative trading system that predicts global weath
 The system has been fully re-architected into a decoupled **FastAPI Backend** and **Streamlit Dashboard**, powered by a robust multi-agent pipeline and SQLAlchemy SQLite database.
 
 1. **Weather Ingestion (`agents/research_agent.py`)**: Connects to Apify & Open-Meteo to scrape global and localized weather data concurrently.
-2. **Reasoning Engine (`agents/prediction_agent.py`)**: Passes normalized weather structures into an OpenRouter LLM (e.g. Mistral/Llama/Deepseek). It acts as a quant forecaster and outputs precise win probabilities and confidence scores.
+2. **Reasoning Engine (`agents/prediction_agent.py`)**: Passes normalized weather structures into an OpenRouter LLM (currently optimized for `meta-llama/llama-3.2-3b-instruct:free`). It acts as a quant forecaster and outputs precise win probabilities, confidence scores, and detailed logical reasoning.
 3. **Risk Management (`agents/risk_agent.py`)**: Implements the mathematical **Kelly Criterion** against Polymarket odds to determine optimal capital allocation, maximizing growth while capping max exposure.
 4. **Execution & Alerts (`agents/trading_agent.py`)**: Executes paper trades and pushes live HTML-formatted Telegram notifications to your mobile device instantly.
 5. **Data Persistence (`database/models.py`)**: A local SQLite database robustly persists predictions, market odds, orders, and portfolio history across cycles.
-6. **Frontend UI (`ui/streamlit_app.py`)**: An interactive, glassmorphism-themed dark mode dashboard to monitor active risk, analytics, and execute agent cycles manually.
+6. **Frontend UI (`ui/streamlit_app.py`)**: An interactive, glassmorphism-themed dark mode dashboard to monitor active risk, view reasoning, and execute agent cycles manually.
+
+## ✨ Recent Updates
+
+* **Real-time Cycle Monitoring:** The "Run Agent Cycle" button now tracks background task progress in real-time with an active UI loading state, automatically refreshing the dashboard upon completion.
+* **Database Reset:** Easily wipe your paper trading portfolio and prediction history to start fresh via the new `🔄 Reset Data` button at the top right of the dashboard.
+* **Latest Results Spotlight:** The most recent prediction and its logical reasoning are now pinned to the top of the dashboard for quick visibility.
+* **Model Overhaul:** The default backend LLM is migrated to `meta-llama/llama-3.2-3b-instruct:free` to ensure stable JSON generation and API uptime.
 
 ## 🚀 Getting Started
 
@@ -43,4 +50,6 @@ python api/main.py
 streamlit run ui/streamlit_app.py
 ```
 
-Open `http://localhost:8501` in your browser. From the sidebar Control Panel, you can click **"Run Agent Cycle"** to trigger a full pipeline execution.
+Open `http://localhost:8501` in your browser. From the sidebar Control Panel, you can click **"Run Agent Cycle"** to trigger a full pipeline execution. The UI will pause and wait for the AI to complete its trading logic before showing you the new PnL, predictions, and rationale. 
+
+To clear your history, use the **"🔄 Reset Data"** button at the top right of the Main Dashboard.
