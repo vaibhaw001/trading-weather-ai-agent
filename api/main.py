@@ -43,7 +43,12 @@ analytics_agent = AnalyticsAgent()
 
 is_running = False
 
-async def run_hermes_cycle():
+from pydantic import BaseModel
+
+class StartAgentRequest(BaseModel):
+    cities: list[str]
+
+async def run_hermes_cycle(cities: list[str]):
     """Runs a full cycle of the agent pipeline."""
     global is_running
     is_running = True
@@ -51,8 +56,9 @@ async def run_hermes_cycle():
     
     db = Session(bind=engine)
     try:
-        cities = ["Delhi", "London", "New York", "Tokyo", "Paris"]
-        
+        if not cities:
+            cities = ["Delhi", "London", "New York", "Tokyo", "Paris"]
+            
         # 1. Research
         research_data = await research_agent.execute(db, cities)
         
@@ -79,11 +85,11 @@ async def run_hermes_cycle():
         is_running = False
 
 @app.post("/start-agent")
-async def start_agent(background_tasks: BackgroundTasks):
+async def start_agent(request: StartAgentRequest, background_tasks: BackgroundTasks):
     global is_running
     if is_running:
         return {"status": "Already running"}
-    background_tasks.add_task(run_hermes_cycle)
+    background_tasks.add_task(run_hermes_cycle, request.cities)
     return {"status": "Agent cycle started"}
 
 @app.get("/agent-status")

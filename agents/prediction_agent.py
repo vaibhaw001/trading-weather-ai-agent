@@ -60,4 +60,7 @@ class PredictionAgent:
             except Exception as e:
                 logger.error(f"Failed to generate prediction for {city}: {e}")
                 
+            import asyncio
+            await asyncio.sleep(3) # Avoid OpenRouter free tier rate limits
+                
         return predictions

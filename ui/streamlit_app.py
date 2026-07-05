@@ -41,10 +41,20 @@ st.markdown("""
 
 st.sidebar.title("🌦️ Control Panel")
 st.sidebar.markdown("---")
+st.sidebar.header("Configuration")
+cities = st.sidebar.multiselect("Selected Cities", ["Delhi", "London", "New York", "Tokyo", "Paris", "Miami", "Sydney"], default=["Delhi", "London", "New York", "Tokyo", "Paris"])
+prediction_type = st.sidebar.selectbox("Prediction Type", ["Rain", "Snow", "Temperature", "Wind", "Humidity"])
+starting_cap = st.sidebar.number_input("Starting Capital", value=1000.0)
+max_risk = st.sidebar.slider("Maximum Risk %", 1, 100, 10)
+kelly_fraction = st.sidebar.slider("Kelly Fraction", 0.0, 1.0, 0.25)
+paper_trading = st.sidebar.toggle("Paper Trading", value=True)
+model = st.sidebar.selectbox("OpenRouter Model", ["meta-llama/llama-3.2-3b-instruct:free", "google/gemma-7b-it:free"])
+
+st.sidebar.markdown("---")
 st.sidebar.header("Agent Controls")
 if st.sidebar.button("Run Agent Cycle"):
     try:
-        response = requests.post(f"{API_URL}/start-agent")
+        response = requests.post(f"{API_URL}/start-agent", json={"cities": cities})
         st.sidebar.success(response.json().get("status", "Started"))
         
         # Wait for agent cycle to finish so the UI updates
@@ -78,15 +88,7 @@ if st.sidebar.button("Save Keys"):
         os.environ["APIFY_API_TOKEN"] = apify_input
     st.sidebar.success("Keys saved successfully! Run the cycle to apply.")
 
-st.sidebar.markdown("---")
-st.sidebar.header("Configuration")
-cities = st.sidebar.multiselect("Selected Cities", ["Delhi", "London", "New York", "Tokyo", "Paris", "Miami", "Sydney"], default=["Delhi", "London", "New York", "Tokyo", "Paris"])
-prediction_type = st.sidebar.selectbox("Prediction Type", ["Rain", "Snow", "Temperature", "Wind", "Humidity"])
-starting_cap = st.sidebar.number_input("Starting Capital", value=1000.0)
-max_risk = st.sidebar.slider("Maximum Risk %", 1, 100, 10)
-kelly_fraction = st.sidebar.slider("Kelly Fraction", 0.0, 1.0, 0.25)
-paper_trading = st.sidebar.toggle("Paper Trading", value=True)
-model = st.sidebar.selectbox("OpenRouter Model", ["meta-llama/llama-3.2-3b-instruct:free", "google/gemma-7b-it:free"])
+
 
 def fetch_data(endpoint):
     try:
