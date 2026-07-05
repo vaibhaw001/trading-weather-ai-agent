@@ -1,71 +1,68 @@
-import logging
-from config.settings import settings
-from agents.prediction_agent import PredictionResult
-from models.trading import MarketOdds, TradeDecision
+import os
+from database import crud
+from sqlalchemy.orm import Session
+from loguru import logger
+from dotenv import load_dotenv
 
-logger = logging.getLogger(__name__)
+load_dotenv()
+MAX_DAILY_LOSS = float(os.getenv("MAX_DAILY_LOSS", "100.0"))
+STARTING_BANKROLL = float(os.getenv("STARTING_BANKROLL", "1000.0"))
+MAX_EXPOSURE_PER_TRADE = float(os.getenv("MAX_EXPOSURE_PER_TRADE", "0.10"))
+KELLY_FRACTION = float(os.getenv("KELLY_FRACTION", "0.25")) # Fractional Kelly
 
 class RiskAgent:
-    """
-    Evaluates AI predictions against market odds and applies quantitative 
-    finance principles (Kelly Criterion) to size positions safely.
-    """
     def __init__(self):
-        self.bankroll = settings.STARTING_BANKROLL
-        self.max_exposure = settings.MAX_EXPOSURE_PER_TRADE
+        self.bankroll = STARTING_BANKROLL
+        self.max_exposure = MAX_EXPOSURE_PER_TRADE
 
-    def evaluate_trade(self, prediction: PredictionResult, market: MarketOdds) -> TradeDecision:
+    async def execute(self, db: Session, market_analysis: dict):
         """
-        Calculates optimal bet size using the Kelly Criterion: f* = p - (q / b)
+        Applies Kelly Criterion to determine bet size.
         """
-        logger.info(f"[{prediction.city_name}] Risk Agent analyzing edge...")
+        logger.info("Risk Agent evaluating position sizing (Kelly Criterion)...")
+        risk_assessments = {}
         
-        # p = AI's predicted win probability
-        p = prediction.probability
-        q = 1.0 - p
-        
-        action = "HOLD"
-        kelly_fraction = 0.0
-        
-        # Check if we have an edge on the 'YES' side
-        if p > market.yes_price:
-            action = "BUY_YES"
-            # b = decimal odds minus 1. In binary prediction markets, a winning $1 share pays $1. 
-            # Decimal odds = 1 / price. So b = (1 / price) - 1
-            b = (1.0 / market.yes_price) - 1.0
-            kelly_fraction = p - (q / b) if b > 0 else 0
+        # Get current portfolio state
+        portfolio = crud.get_latest_portfolio(db)
+        if portfolio:
+            self.bankroll = portfolio.total_capital
             
-        # Check if we have an edge on the 'NO' side
-        elif (1 - p) > market.no_price:
-            action = "BUY_NO"
-            p_no = 1.0 - p
-            q_no = 1.0 - p_no
-            b = (1.0 / market.no_price) - 1.0
-            kelly_fraction = p_no - (q_no / b) if b > 0 else 0
+        for city, analysis in market_analysis.items():
+            action = analysis["action"]
+            if action == "WAIT":
+                continue
+                
+            price = analysis["price"]
+            win_prob = analysis["win_prob"]
             
-        if action == "HOLD" or kelly_fraction <= 0:
-            logger.info(f"[{prediction.city_name}] No edge found or Kelly <= 0. Holding.")
-            return TradeDecision(
-                city_name=prediction.city_name,
-                action="HOLD",
-                confidence=prediction.confidence,
-                predicted_probability=p,
-                kelly_fraction=0.0,
-                recommended_position_size=0.0
-            )
+            # Kelly Criterion Formula: f* = (bp - q) / b
+            # Where b = odds received (decimal odds - 1), p = probability of winning, q = probability of losing (1-p)
+            # In prediction markets where payout is $1:
+            # b = (1 - price) / price
             
-        # Risk Management: Cap the Kelly fraction to our max allowable exposure
-        # Often quant strategies use 'Half-Kelly' to reduce variance. 
-        safe_kelly = min(kelly_fraction, self.max_exposure)
-        position_size = self.bankroll * safe_kelly
-        
-        logger.info(f"[{prediction.city_name}] Edge found! Action: {action} | Kelly: {kelly_fraction:.4f} | Safe Alloc: {safe_kelly*100:.1f}%")
-        
-        return TradeDecision(
-            city_name=prediction.city_name,
-            action=action,
-            confidence=prediction.confidence,
-            predicted_probability=p,
-            kelly_fraction=kelly_fraction,
-            recommended_position_size=position_size
-        )
+            b = (1.0 - price) / price if price > 0 else 0
+            q = 1.0 - win_prob
+            
+            kelly_percentage = 0.0
+            if b > 0:
+                kelly_percentage = (b * win_prob - q) / b
+                
+            # Apply fractional Kelly for safety
+            safe_kelly = max(0.0, kelly_percentage * KELLY_FRACTION)
+            
+            # Cap at max exposure
+            final_allocation_pct = min(safe_kelly, self.max_exposure)
+            bet_size = self.bankroll * final_allocation_pct
+            
+            if bet_size > 0:
+                risk_assessments[city] = {
+                    "action": action,
+                    "price": price,
+                    "bet_size": bet_size,
+                    "kelly_fraction": final_allocation_pct
+                }
+                logger.info(f"[{city}] Risk approved: {action} | Size: ${bet_size:.2f} (Kelly: {final_allocation_pct:.2%})")
+            else:
+                logger.info(f"[{city}] Risk rejected: Kelly suggested 0 allocation.")
+                
+        return risk_assessments

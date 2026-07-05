@@ -4,19 +4,14 @@ An autonomous multi-agent quantitative trading system that predicts global weath
 
 ## 🏗️ Architecture
 
-The backend is built around a service-oriented, multi-agent architecture designed for robustness and modularity:
+The system has been fully re-architected into a decoupled **FastAPI Backend** and **Streamlit Dashboard**, powered by a robust multi-agent pipeline and SQLAlchemy SQLite database.
 
-1. **Weather Ingestion (`services/weather_service.py`)**: Connects to the Apify API to scrape global and localized weather data.
-2. **Reasoning Engine (`agents/prediction_agent.py`)**: Passes normalized weather structures into an OpenRouter LLM (Llama 3) configured with strict prompt engineering. It acts as a quant forecaster and outputs precise win probabilities and confidence scores.
-3. **Risk Management (`agents/risk_agent.py`)**: Implements the mathematical **Kelly Criterion** against simulated Polymarket odds to determine the optimal capital allocation per trade, maximizing growth while preventing ruin through a configured maximum exposure cap.
-4. **Execution & UI (`ui/app.py` & `services/notification_service.py`)**: Executes paper trades, pushes live Telegram notifications, and updates a local Streamlit dashboard to monitor active risk, manual hedges, and historical PnL.
-5. **Trade Settlement (`agents/settlement_agent.py`)**: Responsible for closing open trades and recording profit/loss, enabling dynamic calculation of Historical Win Rate and Total ROI.
-6. **Data Persistence (`database/db.py`)**: Uses a local SQLite database to robustly persist predictions, market odds, and execution history across agent cycles, providing real-time data to the UI.
-
-## ✨ Core Features
-- **Concurrent Processing**: The daemon uses `ThreadPoolExecutor` to evaluate multiple global cities simultaneously, drastically reducing execution time.
-- **Fail-Safe Circuit Breakers**: The agent features strict error handling, pausing trades rather than reverting to mocked logic if the LLM or API endpoints fail.
-- **Automated Testing Suite**: Includes `pytest` suites to mathematically prove and verify the Kelly Criterion logic and max exposure caps.
+1. **Weather Ingestion (`agents/research_agent.py`)**: Connects to Apify & Open-Meteo to scrape global and localized weather data concurrently.
+2. **Reasoning Engine (`agents/prediction_agent.py`)**: Passes normalized weather structures into an OpenRouter LLM (e.g. Mistral/Llama/Deepseek). It acts as a quant forecaster and outputs precise win probabilities and confidence scores.
+3. **Risk Management (`agents/risk_agent.py`)**: Implements the mathematical **Kelly Criterion** against Polymarket odds to determine optimal capital allocation, maximizing growth while capping max exposure.
+4. **Execution & Alerts (`agents/trading_agent.py`)**: Executes paper trades and pushes live HTML-formatted Telegram notifications to your mobile device instantly.
+5. **Data Persistence (`database/models.py`)**: A local SQLite database robustly persists predictions, market odds, orders, and portfolio history across cycles.
+6. **Frontend UI (`ui/streamlit_app.py`)**: An interactive, glassmorphism-themed dark mode dashboard to monitor active risk, analytics, and execute agent cycles manually.
 
 ## 🚀 Getting Started
 
@@ -29,21 +24,23 @@ pip install -r requirements.txt
 ```
 
 ### 2. Configuration
-Rename the `.env.example` file to `.env` and fill in your keys:
+You can enter your API keys directly into the **Control Panel** in the Streamlit UI, which will securely save them to your local `.env` file. You will need:
 - **OpenRouter API Key** (Free LLM inference)
 - **Apify API Token** (Web scraping)
-- **Telegram Bot Token** (Optional, for mobile trade alerts)
+- **Telegram Bot Token & Chat ID** (Optional, for mobile trade alerts)
 
 ### 3. Usage
 
-**Run the Core Trading Daemon**
-To execute a single cycle of data ingestion, AI probability prediction, and trade execution:
+You must run the Backend and the UI concurrently in two separate terminal windows.
+
+**Terminal 1: Start the Core FastAPI Backend**
 ```bash
-python main.py
+python api/main.py
 ```
 
-**Launch the Analytics Dashboard**
-To view the live PnL, track open positions, and execute manual hedges:
+**Terminal 2: Launch the Analytics Dashboard**
 ```bash
-streamlit run ui/app.py
+streamlit run ui/streamlit_app.py
 ```
+
+Open `http://localhost:8501` in your browser. From the sidebar Control Panel, you can click **"Run Agent Cycle"** to trigger a full pipeline execution.

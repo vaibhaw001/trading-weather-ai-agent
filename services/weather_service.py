@@ -1,128 +1,68 @@
-import logging
-from typing import Dict, List, Any
-import pandas as pd
-from apify_client import ApifyClient
-from config.settings import settings
-from models.weather import CityWeatherSummary, DailyForecast
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+import httpx
+from loguru import logger
+import asyncio
+from typing import Dict, Any
 
 class WeatherService:
-    """Service to ingest and normalize weather data via Apify."""
-    
-    # Using 5 target cities for Polymarket relevance
-    TARGET_CITIES = ["New York", "London", "Tokyo", "Sydney", "Miami"]
+    """Service to ingest data via Open-Meteo and NOAA (mocked if NOAA unavailable)"""
 
     def __init__(self):
-        if not settings.APIFY_API_TOKEN:
-            logger.warning("APIFY_API_TOKEN is not set. Data fetching will fail.")
-        self.client = ApifyClient(settings.APIFY_API_TOKEN)
-
-    def fetch_global_data(self) -> List[Dict[str, Any]]:
-        """Fetches data using the 'weather-api' Apify actor."""
-        logger.info("Fetching global weather data via Apify (weather-api)...")
-        # In a real scenario, you use the exact actor ID, e.g., 'janes/weather-api'
-        # We will mock the structure expected from the actor run.
-        run_input = {
-            "locations": self.TARGET_CITIES,
-            "forecastDays": 7
+        # Open-Meteo doesn't require an API key for basic usage
+        self.open_meteo_url = "https://api.open-meteo.com/v1/forecast"
+        
+        # Mapping cities to coordinates for Open-Meteo
+        self.city_coordinates = {
+            "Delhi": {"lat": 28.6139, "lon": 77.2090},
+            "London": {"lat": 51.5074, "lon": -0.1278},
+            "New York": {"lat": 40.7128, "lon": -74.0060},
+            "Tokyo": {"lat": 35.6762, "lon": 139.6503},
+            "Paris": {"lat": 48.8566, "lon": 2.3522},
+            "Sydney": {"lat": -33.8688, "lon": 151.2093},
+            "Miami": {"lat": 25.7617, "lon": -80.1918}
         }
-        
-        try:
-            # Try to call the actual Apify actor
-            logger.info("Attempting live Apify call for 'weather-api'...")
-            # We assume the user has the actor configured. If not, it falls back to mock.
-            actor_call = self.client.actor("weather-api/weather-api").call(run_input=run_input)
-            items = list(self.client.dataset(actor_call["defaultDatasetId"]).iterate_items())
-            if items:
-                logger.info("Live Apify global data retrieved successfully.")
-                return items
-        except Exception as e:
-            logger.warning(f"Live global Apify call failed ({e}). Falling back to mock data.")
-            
-        # Mocking the response for safety
-        return [
-            {"city": city, "temp_c": 22.5, "forecast": [{"date": "2023-11-01", "max": 25, "min": 18, "precip": 0.2, "condition": "Cloudy"}]}
-            for city in self.TARGET_CITIES
-        ]
 
-    def fetch_local_data(self) -> List[Dict[str, Any]]:
-        """Fetches data using the 'weather-database-scraper' Apify actor."""
-        logger.info("Fetching local weather data via Apify (weather-database-scraper)...")
-        run_input = {
-            "searchQueries": self.TARGET_CITIES,
+    async def fetch_open_meteo_data(self, city: str) -> Dict[str, Any]:
+        """Fetches forecast data from Open-Meteo for a given city."""
+        coords = self.city_coordinates.get(city)
+        if not coords:
+            logger.warning(f"Coordinates for {city} not found. Returning empty.")
+            return {}
+
+        params = {
+            "latitude": coords["lat"],
+            "longitude": coords["lon"],
+            "current": "temperature_2m,precipitation,weather_code,wind_speed_10m",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+            "timezone": "auto"
         }
-        
+
         try:
-            logger.info("Attempting live Apify call for 'weather-database-scraper'...")
-            actor_call = self.client.actor("oneary/weather-database-scraper").call(run_input=run_input)
-            items = list(self.client.dataset(actor_call["defaultDatasetId"]).iterate_items())
-            if items:
-                logger.info("Live Apify local data retrieved successfully.")
-                return items
+            async with httpx.AsyncClient() as client:
+                response = await client.get(self.open_meteo_url, params=params, timeout=10.0)
+                response.raise_for_status()
+                return response.json()
         except Exception as e:
-            logger.warning(f"Live local Apify call failed ({e}). Falling back to mock data.")
-            
-        # Mocking the response
-        return [
-            {"location": city, "current_temp": 23.0, "predictions": [{"day": "2023-11-01", "high": 24, "low": 19, "rain_chance": 0.1, "desc": "Partly Cloudy"}]}
-            for city in self.TARGET_CITIES
-        ]
+            logger.error(f"Failed to fetch Open-Meteo data for {city}: {e}")
+            return {}
 
-    def get_standardized_data(self) -> Dict[str, CityWeatherSummary]:
-        """
-        Merges global and local data, standardizing it into Pydantic models (and Pandas for analysis if needed).
-        """
-        global_data = self.fetch_global_data()
-        local_data = self.fetch_local_data()
-        
-        standardized_summaries = {}
-        
-        # Simplified merging logic for demonstration
-        for i, city in enumerate(self.TARGET_CITIES):
-            g_item = global_data[i] if i < len(global_data) else {}
-            l_item = local_data[i] if i < len(local_data) else {}
-            
-            # Use local data for current temp as it might be more accurate/live
-            current_temp = l_item.get("current_temp", g_item.get("temp_c", 20.0))
-            
-            # Normalize forecast (averaging or preferring one source)
-            forecast_list = []
-            if "forecast" in g_item:
-                for day_data in g_item["forecast"]:
-                    forecast_list.append(DailyForecast(
-                        date=day_data["date"],
-                        temp_max_c=day_data["max"],
-                        temp_min_c=day_data["min"],
-                        precipitation_prob=day_data["precip"],
-                        condition=day_data["condition"]
-                    ))
-            
-            summary = CityWeatherSummary(
-                city_name=city,
-                country="Unknown", # Would map dynamically in prod
-                current_temp_c=current_temp,
-                forecast=forecast_list
-            )
-            standardized_summaries[city] = summary
-            
-        return standardized_summaries
+    async def fetch_noaa_data(self, city: str) -> Dict[str, Any]:
+        """Mocked NOAA fetcher. Real NOAA API only covers US locations mostly."""
+        # For a production app, we would use gridpoints endpoint for US cities only
+        return {"source": "NOAA", "forecast": "Normal conditions expected", "alert": None}
 
-    def get_data_as_dataframe(self) -> pd.DataFrame:
-        """Exports the standardized summaries as a Pandas DataFrame."""
-        summaries = self.get_standardized_data()
-        rows = []
-        for city, summary in summaries.items():
-            for day in summary.forecast:
-                rows.append({
-                    "city": summary.city_name,
-                    "date": day.date,
-                    "current_temp_c": summary.current_temp_c,
-                    "max_temp_c": day.temp_max_c,
-                    "min_temp_c": day.temp_min_c,
-                    "precip_prob": day.precipitation_prob,
-                    "condition": day.condition
-                })
-        return pd.DataFrame(rows)
+    async def get_weather_for_cities(self, cities: list[str]) -> Dict[str, Any]:
+        """Runs concurrent fetches for all requested cities."""
+        results = {}
+        
+        async def fetch_city(city):
+            om_data = await self.fetch_open_meteo_data(city)
+            noaa_data = await self.fetch_noaa_data(city)
+            return city, {"open_meteo": om_data, "noaa": noaa_data}
+            
+        tasks = [fetch_city(city) for city in cities]
+        completed = await asyncio.gather(*tasks)
+        
+        for city, data in completed:
+            results[city] = data
+            
+        return results
